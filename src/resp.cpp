@@ -49,6 +49,8 @@ command *parse_command_from_resp(vector <string> tokens) {
     else if (tokens[0] == "FLUSHALL" ) co-> type = FLUSHALL;
     else if (tokens[0] == "APPEND") co->type = APPEND;
     else if (tokens[0] == "INCR") co->type = INCR;
+    else if (tokens[0] == "TTL") co->type = TTL ;
+    else if (tokens[0] == "EXPIRE") co->type = EXPIRE;
     else co->type = UNKNOWN;
     if (tokens.size() > 1) co->key = tokens[1];
     if (tokens.size() > 2) co->value = tokens[2];

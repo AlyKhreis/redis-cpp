@@ -12,6 +12,8 @@ enum commandType {
     FLUSHALL,
     APPEND,
     INCR,
+    EXPIRE,
+    TTL,
     UNKNOWN
 } ;
 

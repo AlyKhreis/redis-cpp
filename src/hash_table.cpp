@@ -3,10 +3,12 @@
 #include <iostream>
 #include <ostream>
 #include <vector>
+#include <ctime>
 HtItem *ht_new_item(string key, string value) {
     HtItem *i = new HtItem;
     i->key = key;
     i->value = value;
+    i->expiry = 0;
     return i;
 }
 HashTable *ht_new(int base_size) {
@@ -77,6 +79,12 @@ void ht_insert(HashTable *ht, string key, string value) {
     ht->items[hash]= ht_new_item(key, value);
     ht->count++;
 }
+bool is_expired(HtItem *i) {
+    long long now = (long long) time(nullptr);
+    if (i->expiry ==0) return false;
+    if (i->expiry < now) return true;
+    else return false;
+}
 string ht_search(HashTable *ht, string key) {
     int attempt = 0;
     int hash = ht_get_hash(key, ht->size, attempt);
@@ -84,7 +92,8 @@ string ht_search(HashTable *ht, string key) {
         hash = ht_get_hash(key, ht->size, attempt);
         if (ht->items[hash] == nullptr) return "";
         else if (ht->items[hash]->key == key) {
-            return ht->items[hash]->value;
+            if (is_expired(ht->items[hash]))return "";
+            else return ht->items[hash]->value;
         }
     }
     return "";
@@ -149,5 +158,33 @@ void ht_increment(HashTable *ht, string key) {
     } catch (std::invalid_argument e) {
         std::cout<<"not an interger"<<std::endl;
     }
+
+}
+HtItem* ht_get_item(HashTable* ht, string key) {
+    int attempt = 0;
+    for (; attempt < ht->size; attempt++) {
+        int hash = ht_get_hash(key, ht->size, attempt);
+        if (ht->items[hash] == nullptr) return nullptr;
+        if (ht->items[hash] != &DELETED_HT_ITEM &&
+            ht->items[hash]->key == key) {
+            return ht->items[hash];
+            }
+    }
+    return nullptr;
+}
+bool ht_expire (HashTable *ht, string key, int seconds) {
+    HtItem *i =ht_get_item(ht, key);
+    long long now = (long long) time(nullptr);
+    if (i != nullptr && i != &DELETED_HT_ITEM) {
+        i->expiry = now + seconds;
+        return true;
+    }else return false;
+}
+int ht_ttl(HashTable *ht, string key) {
+    HtItem *i =ht_get_item(ht, key);
+    if (i != nullptr && i != &DELETED_HT_ITEM) {
+        if (i->expiry == 0 ) return -1;
+        else return (int) (i->expiry - (long long) time(nullptr)) ;
+    }else return -2;
 
 }

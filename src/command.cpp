@@ -16,6 +16,8 @@ command *parse_command(string s1) {
     else if (s2 == "FLUSHALL" ) co-> type = FLUSHALL;
     else if (s2 == "APPEND") co->type = APPEND;
     else if (s2 == "INCR") co->type = INCR;
+    else if (s2 == "EXPIRE") co->type = EXPIRE;
+    else if (s2 == "TTL") co->type = TTL;
     else co->type = UNKNOWN;
     ss >> co->key;
     ss >> co->value;

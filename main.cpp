@@ -87,6 +87,17 @@ int main() {
                     response = resp_integer(stoi(val));
                     break;
                 }
+                case EXPIRE: {
+                    int seconds = stoi(cmd->value);
+                    bool result = ht_expire(ht, cmd->key, seconds);
+                    response = resp_integer(result ? 1 : 0);
+                    break;
+                }
+                case TTL: {
+                    int ttl = ht_ttl(ht, cmd->key);
+                    response = resp_integer(ttl);
+                    break;
+                }
                 case UNKNOWN:
                     response = resp_error("unknown command");
                     break;
