@@ -5,6 +5,7 @@
 #include "command.h"
 #include "hash_table.h"
 #include "resp.h"
+#include "aof.h"
 
 int main() {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -34,6 +35,7 @@ int main() {
     struct sockaddr_in client_addr = {};
     socklen_t client_len = sizeof(client_addr);
     HashTable* ht = ht_new(53);
+    aof_load(ht);
 
     while (true) {
         int client_fd = accept(fd, (struct sockaddr*)&client_addr, &client_len);
@@ -54,6 +56,7 @@ int main() {
             switch (cmd->type) {
                 case SET:
                     ht_insert(ht, cmd->key, cmd->value);
+                    aof_write("SET " + cmd->key + " " + cmd->value);
                     response = resp_simple_string("OK");
                     break;
                 case GET: {
@@ -63,6 +66,7 @@ int main() {
                 }
                 case DEL:
                     ht_delete(cmd->key, ht);
+                    aof_write("DEL " + cmd->key);
                     response = resp_simple_string("OK");
                     break;
                 case EXISTS:
@@ -75,21 +79,25 @@ int main() {
                 }
                 case FLUSHALL:
                     ht_flush(ht);
+                    aof_write("FLUSHALL");
                     response = resp_simple_string("OK");
                     break;
                 case APPEND:
                     ht_append(ht, cmd->key, cmd->value);
+                    aof_write("APPEND " + cmd->key + " " + cmd->value);
                     response = resp_simple_string("OK");
                     break;
                 case INCR: {
                     ht_increment(ht, cmd->key);
                     string val = ht_search(ht, cmd->key);
+                    aof_write("INCR " + cmd->key);
                     response = resp_integer(stoi(val));
                     break;
                 }
                 case EXPIRE: {
                     int seconds = stoi(cmd->value);
                     bool result = ht_expire(ht, cmd->key, seconds);
+                    aof_write("EXPIRE " + cmd->key + " " + cmd->value);
                     response = resp_integer(result ? 1 : 0);
                     break;
                 }

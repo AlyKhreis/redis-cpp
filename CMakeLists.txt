@@ -15,4 +15,6 @@ add_executable(redis_cpp
         src/hash_table.h
         src/resp.cpp
         src/resp.h
+        src/aof.cpp
+        src/aof.h
 )
