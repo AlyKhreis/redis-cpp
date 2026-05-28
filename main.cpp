@@ -6,6 +6,82 @@
 #include "hash_table.h"
 #include "resp.h"
 #include "aof.h"
+#include <thread>
+
+
+void handle_client(int client_fd, HashTable *ht) {
+    while (true) {
+        char buf[256] = {};
+        int n = read(client_fd, buf, sizeof(buf));
+        if (n <= 0) break;
+
+        vector<string> tokens = parse_resp(buf);
+        command* cmd = parse_command_from_resp(tokens);
+        std::string response;
+
+        switch (cmd->type) {
+            case SET:
+                ht_insert(ht, cmd->key, cmd->value);
+                aof_write("SET " + cmd->key + " " + cmd->value);
+                response = resp_simple_string("OK");
+                break;
+            case GET: {
+                string val = ht_search(ht, cmd->key);
+                response = val.empty() ? resp_null() : resp_bulk_string(val);
+                break;
+            }
+            case DEL:
+                ht_delete(cmd->key, ht);
+                aof_write("DEL " + cmd->key);
+                response = resp_simple_string("OK");
+                break;
+            case EXISTS:
+                response = resp_integer(ht_search(ht, cmd->key).empty() ? 0 : 1);
+                break;
+            case KEYS: {
+                vector<string> keys = ht_keys(ht);
+                response = resp_array(keys);
+                break;
+            }
+            case FLUSHALL:
+                ht_flush(ht);
+                aof_write("FLUSHALL");
+                response = resp_simple_string("OK");
+                break;
+            case APPEND:
+                ht_append(ht, cmd->key, cmd->value);
+                aof_write("APPEND " + cmd->key + " " + cmd->value);
+                response = resp_simple_string("OK");
+                break;
+            case INCR: {
+                ht_increment(ht, cmd->key);
+                string val = ht_search(ht, cmd->key);
+                aof_write("INCR " + cmd->key);
+                response = resp_integer(stoi(val));
+                break;
+            }
+            case EXPIRE: {
+                int seconds = stoi(cmd->value);
+                bool result = ht_expire(ht, cmd->key, seconds);
+                aof_write("EXPIRE " + cmd->key + " " + cmd->value);
+                response = resp_integer(result ? 1 : 0);
+                break;
+            }
+            case TTL: {
+                int ttl = ht_ttl(ht, cmd->key);
+                response = resp_integer(ttl);
+                break;
+            }
+            case UNKNOWN:
+                response = resp_error("unknown command");
+                break;
+        }
+        write(client_fd, response.c_str(), response.size());
+        delete cmd;
+    }
+    close(client_fd);
+}
+
 
 int main() {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -41,79 +117,10 @@ int main() {
         int client_fd = accept(fd, (struct sockaddr*)&client_addr, &client_len);
         if (client_fd < 0) {
             std::cerr << "server failed to accept client" << std::endl;
-            return 1;
+            continue;  // changed from return 1 so server keeps running
         }
-
-        while (true) {
-            char buf[256] = {};
-            int n = read(client_fd, buf, sizeof(buf));
-            if (n <= 0) break;
-
-            vector<string> tokens = parse_resp(buf);
-            command* cmd = parse_command_from_resp(tokens);
-            std::string response;
-
-            switch (cmd->type) {
-                case SET:
-                    ht_insert(ht, cmd->key, cmd->value);
-                    aof_write("SET " + cmd->key + " " + cmd->value);
-                    response = resp_simple_string("OK");
-                    break;
-                case GET: {
-                    string val = ht_search(ht, cmd->key);
-                    response = val.empty() ? resp_null() : resp_bulk_string(val);
-                    break;
-                }
-                case DEL:
-                    ht_delete(cmd->key, ht);
-                    aof_write("DEL " + cmd->key);
-                    response = resp_simple_string("OK");
-                    break;
-                case EXISTS:
-                    response = resp_integer(ht_search(ht, cmd->key).empty() ? 0 : 1);
-                    break;
-                case KEYS: {
-                    vector<string> keys = ht_keys(ht);
-                    response = resp_array(keys);
-                    break;
-                }
-                case FLUSHALL:
-                    ht_flush(ht);
-                    aof_write("FLUSHALL");
-                    response = resp_simple_string("OK");
-                    break;
-                case APPEND:
-                    ht_append(ht, cmd->key, cmd->value);
-                    aof_write("APPEND " + cmd->key + " " + cmd->value);
-                    response = resp_simple_string("OK");
-                    break;
-                case INCR: {
-                    ht_increment(ht, cmd->key);
-                    string val = ht_search(ht, cmd->key);
-                    aof_write("INCR " + cmd->key);
-                    response = resp_integer(stoi(val));
-                    break;
-                }
-                case EXPIRE: {
-                    int seconds = stoi(cmd->value);
-                    bool result = ht_expire(ht, cmd->key, seconds);
-                    aof_write("EXPIRE " + cmd->key + " " + cmd->value);
-                    response = resp_integer(result ? 1 : 0);
-                    break;
-                }
-                case TTL: {
-                    int ttl = ht_ttl(ht, cmd->key);
-                    response = resp_integer(ttl);
-                    break;
-                }
-                case UNKNOWN:
-                    response = resp_error("unknown command");
-                    break;
-            }
-            write(client_fd, response.c_str(), response.size());
-            delete cmd;
-        }
-
-        close(client_fd);
+        std::thread t(handle_client, client_fd, ht);
+        t.detach();
     }
+
 }
